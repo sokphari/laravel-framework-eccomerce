@@ -1,0 +1,6 @@
+/.env
+/backend/.env
+/backend/vendor/
+/backend/node_modules/
+/backend/storage/logs/*.log
+/backend/bootstrap/cache/*.php

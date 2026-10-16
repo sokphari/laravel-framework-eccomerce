@@ -1,0 +1,293 @@
+
+
+
+PHONE & ACCESSORIES
+E-COMMERCE PLATFORM
+PROJECT REQUIREMENTS & SYSTEM DESIGN
+Laravel 12 • PostgreSQL • Redis • Docker • React + TypeScript
+
+Version 1.0  |  14 October 2026
+
+ឯកសារគម្រោង (Project Specification)
+
+Scope: Phone, Accessories, New/Second-Hand Units, Free Gifts, Bundles, Inventory, Order, Payment, Warranty and Customer Experience.
+Status: Draft specification — items tagged “Decision” must be approved before implementation.
+
+1. Project Overview
+គម្រោងនេះជា E-Commerce Platform សម្រាប់លក់ទូរស័ព្ទថ្មី/មួយទឹក, គ្រឿងបន្លាស់ (Accessories), Bundle និង Free Gifts។ អតិថិជនអាចស្វែងរកប្រៀបធៀបទំនិញ កម្មង់ និងតាមដានការដឹកជញ្ជូន។ ក្រុមការងារខាងក្នុងអាចគ្រប់គ្រង Catalog, Serial/IMEI, Stock, Promotion, Payment, Warranty និង Report តាម Role។
+Core objectives
+    • បង្កើត Public Storefront ដែលលឿន, Responsive និងមាន UX ងាយប្រើ។
+    • ធានា Stock ត្រឹមត្រូវរហូតដល់កម្រិត IMEI/Serial សម្រាប់ទូរស័ព្ទ និង Items តាម Quantity សម្រាប់ Accessories។
+    • ធ្វើ Checkout ឱ្យមានសុវត្ថិភាព និងការពារ Overselling/Double Payment។
+    • មាន RBAC, Audit Trail, Rate Limiting និង Observability សម្រាប់ប្រតិបត្តិការ។
+    • រចនាបែប Modular Monolith ដើម្បីងាយពង្រីកនៅពេលក្រោយ។
+2. Business Scope & Assumptions
+Area	Supported capabilities
+Products	Phones, tablets (future), chargers, cases, earbuds, cables, screen protectors, power banks.
+Sales	New and used phone sales; unit-level pricing/inspection; accessories quantity sale.
+Offers	Free gifts, product bundles, coupon, campaign promotion and loyalty extension.
+Channels	Responsive website + admin dashboard; future PWA/mobile integration.
+Operations	One business with one or multiple warehouses; multi-branch sales may be added later.
+Currency	Configurable primary currency; decision required for KHR/USD and FX rules.
+Checkout	Online orders with configurable gateway and COD/manual transfer depending on provider.
+
+Decisions to confirm
+    • Single-store vs multi-vendor marketplace; document assumes single business with multiple roles/warehouses.
+    • Actual payment provider(s), shipping provider(s), currency and taxation rules.
+    • Whether guest checkout is allowed; initial recommendation: accounts required for online checkout.
+    • Used phone acceptance criteria and whether customers can trade in devices.
+    • Which country-specific privacy, invoicing and warranty policies apply.
+3. Technology Stack & Boundaries
+Layer	Choice	Responsibilities
+Backend API	Laravel 12 / PHP	REST API, validation, policies, business services, transactions, jobs.
+Authentication	JWT with refresh-token design	Bearer auth for API; rotation, revocation, short-lived access tokens.
+Authorization	RBAC + Laravel Policies	Admin, Manager, Staff, Customer; least-privilege; ownership checks.
+Database	PostgreSQL	Transactional source of truth, relations, constraints, indexes.
+Cache / Queue	Redis	Cache, throttling store, queues, short-lived locks, TTLs.
+Infra	Docker Compose	Nginx, PHP-FPM, workers, scheduler, PostgreSQL, Redis, frontend.
+Frontend	React + TypeScript	Public storefront and role-protected dashboard.
+Files	Object storage / local dev	Product images, inspection images, receipts and exports.
+Observability	JSON logs + monitoring	Request ID, health probes, error tracking, metrics, alert routing.
+
+JWT implementation decision: choose and maintain a Laravel 12-compatible JWT library or a reviewed first-party token architecture; verify compatibility, rotation, revocation and security before shipping. JWT alone does not implement RBAC.
+4. User Roles & Permission Model
+Role	Default responsibility	Sample permissions
+Admin	Full system governance	users.manage, roles.manage, settings.manage, audit.view, all business operations.
+Manager	Daily operations and approval	products.manage, prices.approve, orders.manage, reports.view, stock.adjust.approve.
+Staff	Assigned operational duties	products.view, orders.fulfill, stock.receive, support.respond; no roles/settings.
+Customer	Own account & purchase history	profile.manage_own, carts.manage_own, orders.create, orders.view_own, reviews.create.
+
+Implement permission assignment using roles, role_permissions, optional direct overrides only when genuinely needed, Laravel Gates/Policies and per-resource ownership checks. Every server-side endpoint checks authorization; hiding buttons in React is not sufficient. Sensitive actions can require reauthentication and optional 2FA.
+5. Complete Module Catalogue (24 Modules)
+#	Module	Primary tables
+01	Identity & RBAC	users, roles, permissions, user_roles, role_permissions
+02	Customer Management	customer_profiles, customer_addresses
+03	Categories & Brands	categories, brands
+04	Product Management	products, product_images, product_variants
+05	Dynamic Specifications	attributes, attribute_options, category_attributes, product_attribute_values
+06	Second-Hand Products	product_units, product_conditions, inspection_reports
+07	Inventory & Stock	warehouses, stocks, stock_movements, stock_reservations
+08	Serial & IMEI Tracking	product_serials
+09	Free Gifts & Bundles	gift_promotions, gift_promotion_items, order_gifts, product_bundles, bundle_items
+10	Pricing Management	product_prices, price_histories
+11	Discounts & Promotions	promotions, promotion_rules, promotion_redemptions
+12	Shopping Cart	carts, cart_items
+13	Wishlist & Compare	wishlists, wishlist_items, product_comparisons
+14	Orders	orders, order_items, order_status_histories
+15	Payment Management	payments, payment_transactions, refunds
+16	Delivery & Shipping	shipping_methods, shipments, shipment_tracking
+17	Returns & Exchanges	return_requests, return_items, exchanges
+18	Warranty Management	warranties, warranty_claims
+19	Reviews & Ratings	product_reviews, review_images
+20	Coupons & Loyalty	coupons, coupon_usages, loyalty_accounts, loyalty_transactions
+21	Suppliers & Purchasing	suppliers, purchase_orders, purchase_order_items
+22	Notifications	notifications, notification_templates
+23	Reports & Analytics	report_exports, dashboard_snapshots
+24	System & Audit	audit_logs, settings, media_files
+
+6. Module Functional Requirements
+01. Identity & RBAC
+Registration/login, JWT, roles, permissions, device logout. Database: users, roles, permissions, user_roles, role_permissions.
+02. Customer Management
+Profiles, address book, order relationships. Database: customer_profiles, customer_addresses.
+03. Categories & Brands
+Hierarchical categories, brand logos, slugs. Database: categories, brands.
+04. Product Management
+SKU, variants, media, draft/published lifecycle. Database: products, product_images, product_variants.
+Products can be parent models with variants for color/storage; product_images reference media assets, variants have unique SKU and explicit stock policy.
+05. Dynamic Specifications
+RAM, storage, color, battery, connectivity. Database: attributes, attribute_options, category_attributes, product_attribute_values.
+06. Second-Hand Products
+Per-unit condition, grade, photos, inspection checklist. Database: product_units, product_conditions, inspection_reports.
+Second-hand phone units must reference a variant, grade/condition, inspection results, unit-specific media, acquisition cost, sale status and optional serial entry.
+07. Inventory & Stock
+Per-warehouse inventory, movement ledger and reservations. Database: warehouses, stocks, stock_movements, stock_reservations.
+08. Serial & IMEI Tracking
+Unique device identity, status and order assignment. Database: product_serials.
+IMEI/serial must be unique (when applicable); store normalized identifiers securely and control staff visibility. Avoid public exposure of full IMEI.
+09. Free Gifts & Bundles
+Gift eligibility, bundle pricing, stock deduction. Database: gift_promotions, gift_promotion_items, order_gifts, product_bundles, bundle_items.
+Gift rules define dates, eligible cart items, gift stock, max quantity, stacking and cancellation/return recovery. Each gifted item becomes a zero-charge order_gift or order line with attribution.
+10. Pricing Management
+Effective date, currency, price approval/audit. Database: product_prices, price_histories.
+11. Discounts & Promotions
+Campaign rules, caps, eligibility and stacking priority. Database: promotions, promotion_rules, promotion_redemptions.
+12. Shopping Cart
+Quantity edits, server-side price revalidation. Database: carts, cart_items.
+13. Wishlist & Compare
+Save and compare phones/specs. Database: wishlists, wishlist_items, product_comparisons.
+14. Orders
+Checkout, state transitions and snapshot prices. Database: orders, order_items, order_status_histories.
+Order items snapshot SKU, name, variant, tax, discounts, quantity and price at checkout; subsequent catalog edits must not alter historical orders.
+15. Payment Management
+Gateway reconciliation, webhook verification, idempotency. Database: payments, payment_transactions, refunds.
+Only confirmed verified payment webhook + reconciliation can mark paid; never trust frontend-reported success.
+16. Delivery & Shipping
+Delivery options, tracking, fulfillment events. Database: shipping_methods, shipments, shipment_tracking.
+17. Returns & Exchanges
+RMA lifecycle, restock decisions and refunds. Database: return_requests, return_items, exchanges.
+18. Warranty Management
+Device IMEI-linked warranty and service claims. Database: warranties, warranty_claims.
+19. Reviews & Ratings
+Verified purchaser reviews and moderation. Database: product_reviews, review_images.
+20. Coupons & Loyalty
+Coupon rules, points ledger, redemption controls. Database: coupons, coupon_usages, loyalty_accounts, loyalty_transactions.
+21. Suppliers & Purchasing
+Supply acquisition, goods received and cost. Database: suppliers, purchase_orders, purchase_order_items.
+22. Notifications
+Email, in-app; future Telegram and real-time. Database: notifications, notification_templates.
+23. Reports & Analytics
+Sales/stock/returns metrics and background exports. Database: report_exports, dashboard_snapshots.
+24. System & Audit
+Config, immutable activity evidence and media metadata. Database: audit_logs, settings, media_files.
+Audit actor, action, entity type/ID, before/after safe diffs, IP, request ID and timestamp. Never log raw JWT, passwords or payment credentials.
+7. Data Model & Relationship Design
+    • users ↔ roles: many-to-many through user_roles; roles ↔ permissions: many-to-many through role_permissions.
+    • categories → products, brands → products, products → variants, products → images, categories ↔ attributes.
+    • product_variants → stocks (per warehouse), stock_movements, stock_reservations; serials/product_units reference a specific variant.
+    • carts → cart_items → product_variants; orders → order_items → product_variants (nullable FK if archived, snapshot preserved).
+    • orders → payments → payment_transactions; orders → shipments; order_items → warranties / returns.
+    • gift_promotions ↔ applicable products; order_gifts → orders and allocated gift variant; bundles ↔ variants.
+    • suppliers → purchase_orders → purchase_order_items → received stock movements.
+    • audit_logs → actor user, entity type/ID; notifications → recipient user.
+Recommended common fields
+id (UUID/ULID or bigint chosen consistently), created_at, updated_at, optional deleted_at, status, created_by/updated_by where applicable. Monetary fields as BIGINT minor units (with currency) or NUMERIC precision; never floating point. Use UNIQUE, FOREIGN KEY and CHECK constraints, and transaction boundaries.
+Phone-specific data examples
+Field / entity	Purpose
+product_variants.sku	Unique sellable model configuration (e.g., 128GB / Blue).
+product_units.condition_id	Grade for second-hand individual units.
+product_serials.imei1 / imei2	Optional device IMEI identifiers with controlled access.
+inspection_reports	Battery health, screen, camera, sensors, accessories, defects.
+stocks.on_hand / reserved	Derived available = on_hand − reserved; enforce invariants.
+order_items.unit_price_minor	Price captured at the moment of checkout.
+stock_reservations.expires_at	Timed allocation prevents unpaid carts locking stock forever.
+
+8. System Architecture
+Recommended initial architecture: Modular Monolith, independently deployable React frontend and Laravel API. This reduces distributed-system complexity while preserving clear module boundaries.
+Component	Data flow
+React Storefront / Admin	HTTPS → Nginx / reverse proxy → Laravel API
+Laravel API	Auth middleware → Rate limiter → Controller → Service/Policy → PostgreSQL
+Redis	Cache lookups, rate-limit state, job queue, short-lived locks
+Background Workers	Redis jobs → email/in-app notifications, report exports, alerts
+Storage	Signed uploads/read URLs for product media; secure private docs
+Monitoring	Structured app logs → aggregator, metrics, alerts and health checks
+
+Suggested Docker services
+nginx, app (PHP-FPM), queue-worker, scheduler, postgres, redis, frontend-dev. For production use managed PostgreSQL/Redis or backed-up stateful volumes, proper secrets management, TLS termination, independent worker scaling, restart policies and health checks.
+9. Checkout, Inventory & Payment Safety
+    1. Customer builds cart; server retrieves real SKU, price, gift and promotion eligibility.
+    2. Validate address, shipping, coupons, taxes and final totals on server.
+    3. Start PostgreSQL transaction; lock relevant stock rows in deterministic order using SELECT ... FOR UPDATE.
+    4. Check available stock; create stock reservations and order/order_items atomically; commit.
+    5. Create payment intent with unique idempotency key, mapped to order, outside long-lived DB locks.
+    6. Verify signed payment webhook and ensure deduplication before marking order paid.
+    7. Commit stock movement / assigned IMEI / fulfillment according to defined capture workflow.
+    8. For failure or expiry, safely release reservation exactly once; retries remain idempotent.
+Important: inventory ledger, reservations and stock summary must use a single explicit consistency model. Free gifts and bundles consume inventory like regular products. Lock rows in stable order to reduce deadlocks; retry transient conflicts safely. Never keep a database transaction open during remote gateway requests.
+10. API Standards & Pagination
+Base: /api/v1. JSON consistent shape with data, meta and errors. Use Laravel Form Requests for validation, API Resources for serialization, policies for access checks, trace/request IDs and versioning.
+Use case	API behavior
+Catalog	GET /api/v1/products?search=&brand_id=&category_id=&sort=&per_page=
+Product details	GET /api/v1/products/{slug}; variants, specs, gallery, gifts.
+Account	POST /api/v1/auth/register; POST /login; POST /refresh; POST /logout.
+Cart	GET /cart; POST /cart/items; PATCH /cart/items/{id}; DELETE /cart/items/{id}.
+Checkout	POST /checkout with idempotency key; GET /orders/{id} scoped to user.
+Payments	POST /webhooks/payments/{provider} (verified signature, replay protection).
+Admin products	GET/POST /admin/products; PATCH/DELETE /admin/products/{id}.
+Admin inventory	GET /admin/stocks; POST /admin/stock-adjustments with approvals.
+
+Pagination: cap per_page (e.g., 100 maximum, default 20), whitelist sortable/filterable fields, use simplePaginate when total count is unnecessary, and cursorPaginate for huge stable sorted datasets (unique tiebreaker). Index frequently filtered columns; consider full-text/trigram search for product names and specifications. Never interpolate raw input into SQL ORDER BY.
+11. API Security & Suggested Rate Limits
+Endpoint	Suggested policy	Key scope
+Login	5 attempts / minute	Normalized account + IP; additional abuse checks
+Register	3 requests / hour	IP, with anti-bot and abuse review
+Public products	120 requests / minute	IP or trusted client identification
+Search	60 requests / minute	IP/user as applicable
+Cart	60 requests / minute	Authenticated user
+Checkout	5 requests / minute	Authenticated user + idempotency
+Admin APIs	60 requests / minute	Authenticated user
+
+These are initial design targets—not production-proven limits. Tune with telemetry, reverse-proxy controls and legitimate usage. Return HTTP 429 with Retry-After where appropriate; use Redis-backed rate limit store across app instances. Password policies, email verification, reset tokens, short JWT expiry, refresh-token rotation/revocation, optional Admin/Manager 2FA, device/session records, suspicious login monitoring and lockout safeguards are required.
+Protect CORS with an exact allowlist, enforce HTTPS, parameterized queries, output encoding and content security policy. For Bearer JWT in Authorization headers, CSRF risk differs from cookie auth; if refresh tokens live in cookies, implement SameSite/Secure/HttpOnly and CSRF protection appropriate to the chosen flow. Never store long-lived sensitive tokens in localStorage by default.
+12. Redis Cache & Queues
+Cached item	Strategy	Invalidate on
+Categories / Brands	TTL 15–60 min; keys by locale and visibility	Create/update/delete or visibility change
+Public product summaries	Short TTL 1–10 min; filtered keys	Product, variant, image, price, promotion change
+Featured products	TTL 5–15 min	Feature/price/publish/promotion change
+Dashboard summaries	TTL 1–5 min or scheduled aggregation	Relevant business events / refresh
+Stock & payment state	Strong consistency path, not naive cached source of truth	Verified transactions and movement events
+
+Queues: order confirmation, receipt email, low-stock alerts, report exports, notification dispatch, image processing. Jobs must be retry-safe, use failure handling/dead-letter strategy and monitoring. Laravel Events/Listeners decouple business actions from notifications. Optional future Telegram and Laravel Reverb real-time updates.
+13. Audit, Logs, Monitoring & Recovery
+    • Audit product create/update/delete, price override, role/permission change, stock receipt/adjustment, refund approvals and order transitions.
+    • Use JSON structured logs with timestamp, service, level, request_id, user_id (where safe), endpoint and safe error context.
+    • Expose liveness /health/live and readiness /health/ready; avoid exposing credentials/config publicly.
+    • Metrics: p95 API latency, 4xx/5xx, payment webhook failures, slow queries, queue lag, cache hit rates, oversell conflicts and stock discrepancies.
+    • Alerts: elevated error rates, checkout failure, low inventory, failed jobs and database health.
+    • Daily backup + tested restore, defined RPO/RTO, encrypted backups, migration rollback and incident runbooks.
+14. Frontend Design System — Modern Blue
+Token	HEX	Application
+Primary Blue	#2563EB	Primary CTA, active sidebar, links.
+Primary Hover	#1D4ED8	Hover/pressed state.
+Light Blue	#DBEAFE	Selection, badges, subtle highlights.
+White	#FFFFFF	Cards and light surfaces.
+Slate Background	#F8FAFC	Light app background.
+Dark Slate	#0F172A	Dark background and sidebar.
+Text Black	#111827	Headings and body in light mode.
+
+UI: clean white sidebar in light mode and dark slate in dark mode; blue active nav; medium-radius buttons; softly bordered cards; searchable/filterable tables; consistent desktop/tablet/mobile design. Maintain adequate contrast, focus indicators, keyboard accessibility and reduced-motion support.
+Public storefront pages
+Home, Shop Catalog, Brand Page, Category Page, Product Detail + Gallery, Compare, Wishlist, Cart, Checkout, Order Success, Account/Profile, Orders, Order Tracking, Warranty / Returns, Sign In / Sign Up.
+Staff/Admin pages
+Overview Dashboard, Products, Brands, Categories, Attributes, Used Units/Inspection, Warehouse/Stock, IMEI Tracking, Gifts/Bundles, Pricing/Promotions, Orders, Payments/Refunds, Shipping, Returns, Warranty, Suppliers/Purchasing, Customers, Reviews, Notifications, Reports, Users/Roles, Audit Logs, Settings.
+15. Nonfunctional Requirements & Acceptance
+Dimension	Baseline acceptance criteria
+Security	All private endpoints protected by JWT + permissions + resource ownership; critical actions logged.
+Correctness	Concurrent checkout tests do not oversell; webhook duplicates do not duplicate charges/orders.
+Performance	Targets set by load tests (initial goal p95 read API < 500 ms under defined test load).
+Resilience	Worker jobs retry safely; no lost order after payment webhook retries.
+Accessibility	Responsive and keyboard-navigable; WCAG 2.2 AA target where feasible.
+Data quality	DB constraints, referential integrity, no float money, migrations with review.
+Operations	Monitoring, alerts, backups, restore drill and documented deployments.
+
+16. Development Roadmap
+Phase	Deliverables	Exit criteria
+0 — Foundation	Repo, Docker, Laravel/React setup, CI, migrations, OpenAPI, logging, JWT/RBAC.	Local stack starts and secured API smoke tests pass.
+1 — Catalog	Categories, brands, specs, products, variants, image upload, storefront.	Catalog CRUD + public browse/search available.
+2 — Inventory	Warehouses, stock ledger, IMEI, used units, inspections, purchasing.	Stock balances and serial uniqueness tested.
+3 — Commerce	Cart, price history, gifts, bundles, coupons, checkout, orders.	Concurrency/inventory reservation tests pass.
+4 — Payments / Fulfillment	Gateway adapters, verified webhooks, shipping and refunds.	Idempotency + reconciliation + webhook replay tests pass.
+5 — Customer / After-sales	Wishlist, compare, reviews, warranty, returns, notifications.	End-to-end purchase and support workflow passes.
+6 — Operations & Launch	Reports, caching, rate limits, metrics, backup drills, load/security testing.	Deployment checklist, rollback and alerts verified.
+
+17. API Testing & Quality Assurance
+    • Unit tests for pricing, gift eligibility, RBAC rules and stock calculations.
+    • Feature tests for every role and ownership boundary; expect 401 without authentication and 403 without authorization.
+    • Concurrent integration tests for same SKU/IMEI purchases (cannot sell one serial twice).
+    • Payment webhook tests for invalid signatures, duplicate events, reordered events and refunds.
+    • Pagination/filter tests: max page size, stable cursor order, SQL-injection attempts and indexed query plans.
+    • E2E React tests for desktop/mobile checkout and admin workflow; accessibility and performance reviews.
+    • CI pipeline: static analysis, code style, migrations on ephemeral PostgreSQL, API tests, frontend typecheck/build and image vulnerability scanning.
+18. Initial Backlog & Priorities
+Priority	Work items
+P0 — Must have	JWT/RBAC, categories/brands/products/variants, stock integrity, IMEI, cart, safe checkout, orders, payment verification, audit, UI basic flow.
+P1 — Important	Gifts/bundles, dynamic specifications, used phone inspections, delivery, warranty, promotion, search, reporting, notifications.
+P2 — Future	Loyalty, compare sophistication, 2FA expansion, Telegram, Reverb live UI, advanced business intelligence, multi-branch/multi-vendor.
+
+19. Risk Register
+Risk	Mitigation
+Overselling / duplicate payments	Row locks, reservations, idempotency keys, verified webhooks, replay tests.
+JWT leaks / role escalation	Short token lifetimes, rotation, revocation, policies and authorization tests.
+Stale price or gift logic	Validate at checkout, snapshot purchases and invalidate event-driven caches.
+IMEI exposure or mismatch	Encryption/masking strategy, unique constraints, controlled access and reconciliation.
+Unexpected scope growth	Phase gates, explicit business decisions and API contracts.
+Operational outage	Observability, backups, restore drills, queue resilience and health checks.
+
+20. Approval Checklist & Next Deliverables
+    • Confirm business model, currency, checkout/login policy, tax, shipping and payment gateways.
+    • Approve RBAC permission matrix and used-phone inspection fields.
+    • Approve detailed PostgreSQL ERD and table-level DDL/migrations.
+    • Agree on OpenAPI 3 contract, error format and auth refresh-token implementation.
+    • Prepare Figma wireframes for customer and Admin/Manager/Staff dashboards.
+    • Translate accepted specification into sprint tickets with tests and definition of done.
+Document note: This is a project baseline, not executable schema or a security certification. Validate gateway, compliance and JWT package compatibility before implementation.
